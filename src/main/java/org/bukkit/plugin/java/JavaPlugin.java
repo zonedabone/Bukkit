@@ -1,14 +1,21 @@
 package org.bukkit.plugin.java;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -19,6 +26,7 @@ import org.bukkit.command.PluginCommand;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.generator.ChunkGenerator;
+import org.bukkit.plugin.Persist;
 import org.bukkit.plugin.PluginBase;
 import org.bukkit.plugin.PluginDescriptionFile;
 import org.bukkit.plugin.PluginLoader;
@@ -214,11 +222,77 @@ public abstract class JavaPlugin extends PluginBase {
             isEnabled = enabled;
 
             if (isEnabled) {
+                try{
+                    loadData();
+                }catch(IOException e){
+                    e.printStackTrace();
+                } catch (IllegalArgumentException e) {
+                    e.printStackTrace();
+                } catch (ClassNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
                 onEnable();
             } else {
                 onDisable();
+                try{
+                    saveData();
+                }catch(IOException e){
+                    e.printStackTrace();
+                } catch (IllegalArgumentException e) {
+                    e.printStackTrace();
+                } catch (IllegalAccessException e) {
+                    e.printStackTrace();
+                }
             }
         }
+    }
+    
+    /**
+     * Loads plugin data from a file.
+     * @throws ClassNotFoundException 
+     * @throws IOException 
+     * @throws IllegalAccessException 
+     * @throws IllegalArgumentException 
+     */
+    protected void loadData() throws IOException, ClassNotFoundException, IllegalArgumentException, IllegalAccessException {
+        File f = new File(this.getDataFolder(),"data.bukkit");
+        if(f.exists()){
+            ObjectInputStream ois = new ObjectInputStream(new FileInputStream(f));
+            Map<?, ?> values = (Map<?, ?>) ois.readObject();
+            ois.close();
+            for(Field field:this.getClass().getFields()){
+                if(field.isAnnotationPresent(Persist.class)){
+                    Object o = values.get(field.getName());
+                    System.out.println(field.getName()+" - "+o);
+                    System.out.println(field.getType());
+                    System.out.println(o.getClass());
+                    System.out.println(field.getType().isInstance(o));
+                    if(o != null/* && field.getType().isInstance(o)*/){
+                        field.set(this, o);
+                    }
+                }
+            }
+        }
+        
+    }
+    
+    protected void saveData() throws FileNotFoundException, IOException, IllegalArgumentException, IllegalAccessException {
+        Map<Object, Object> values = new HashMap<Object, Object>();
+        for(Field f:this.getClass().getFields()){
+            if(f.isAnnotationPresent(Persist.class)){
+                values.put(f.getName(), f.get(this));
+            }
+        }
+        if(!values.isEmpty()){
+            this.getDataFolder().mkdirs();
+            File f = new File(this.getDataFolder(),"data.bukkit");
+            ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(f));
+            oos.writeObject(values);
+            oos.close();
+        }
+        
     }
 
     /**
